@@ -1,4 +1,4 @@
-import React, { useContext, useState, useEffect } from "react";
+import React, { useContext, useState, useEffect, useRef } from "react";
 import "./CartItems.css";
 import cross_icon from "../Assets/cart_cross_icon.png";
 import { ShopContext } from "../../Context/ShopContext";
@@ -10,6 +10,7 @@ const CartItems = () => {
   const [paymentMethod, setPaymentMethod] = useState('cod'); // 'cod' or 'payos'
   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
   const [payosLoading, setPayosLoading] = useState(false);
+  const [payosError, setPayosError] = useState(null);
   const [payOSConfig, setPayOSConfig] = useState({
     RETURN_URL: window.location.href,
     ELEMENT_ID: 'payos-embedded',
@@ -57,6 +58,7 @@ const CartItems = () => {
   });
 
   const { open, exit } = usePayOS(payOSConfig);
+  const payosContainerRef = useRef(null);
 
   const handleCODCheckout = async () => {
     try {
@@ -103,6 +105,7 @@ const CartItems = () => {
       }
 
       setPayosLoading(true);
+      setPayosError(null);
       setPaymentModalVisible(true);
 
       const orderData = {
@@ -123,20 +126,63 @@ const CartItems = () => {
       const data = await res.json();
       if (data.success && data.data.checkoutUrl) {
         console.log('✅ PayOS payment link created:', data.data.checkoutUrl);
-        setPayOSConfig(prevConfig => ({
-          ...prevConfig,
+        
+        // Update config with new checkout URL
+        const newConfig = {
+          ...payOSConfig,
           CHECKOUT_URL: data.data.checkoutUrl
-        }));
+        };
+        setPayOSConfig(newConfig);
+        
+        // Small delay to ensure state is updated before calling open
+        setTimeout(() => {
+          try {
+            console.log('🚀 Attempting to open PayOS checkout...');
+            open();
+          } catch (error) {
+            console.error('❌ Error opening PayOS checkout:', error);
+            // Fallback: manually create iframe
+            createManualIframe(data.data.checkoutUrl);
+          }
+        }, 100);
+        
       } else {
-        alert(data.message || "Failed to create payment link!");
-        setPaymentModalVisible(false);
+        const errorMsg = data.message || "Failed to create payment link!";
+        setPayosError(errorMsg);
+        console.error('❌ PayOS error:', errorMsg);
+        setTimeout(() => {
+          setPaymentModalVisible(false);
+        }, 2000);
       }
     } catch (err) {
       console.error(err);
-      alert("Payment creation error!");
-      setPaymentModalVisible(false);
+      const errorMsg = "Payment creation error!";
+      setPayosError(errorMsg);
+      setTimeout(() => {
+        setPaymentModalVisible(false);
+      }, 2000);
     } finally {
       setPayosLoading(false);
+    }
+  };
+
+  // Fallback function to manually create iframe if PayOS hook fails
+  const createManualIframe = (checkoutUrl) => {
+    if (payosContainerRef.current) {
+      // Clear existing content
+      payosContainerRef.current.innerHTML = '';
+      
+      // Create iframe manually
+      const iframe = document.createElement('iframe');
+      iframe.src = checkoutUrl;
+      iframe.style.width = '100%';
+      iframe.style.height = '500px';
+      iframe.style.border = 'none';
+      iframe.style.borderRadius = '8px';
+      iframe.title = 'PayOS Checkout';
+      
+      payosContainerRef.current.appendChild(iframe);
+      console.log('✅ Manual iframe created successfully');
     }
   };
 
@@ -150,10 +196,37 @@ const CartItems = () => {
 
   // Handle PayOS configuration changes
   useEffect(() => {
-    if (payOSConfig.CHECKOUT_URL) {
-      open();
+    if (payOSConfig.CHECKOUT_URL && paymentModalVisible) {
+      console.log('🔄 PayOS config updated, attempting to open checkout...');
+      // Try to open PayOS checkout
+      try {
+        open();
+      } catch (error) {
+        console.error('❌ Error in useEffect when opening PayOS:', error);
+        // Fallback to manual iframe
+        createManualIframe(payOSConfig.CHECKOUT_URL);
+      }
     }
-  }, [payOSConfig.CHECKOUT_URL, open]);
+  }, [payOSConfig.CHECKOUT_URL, paymentModalVisible]);
+
+  // Cleanup function when modal closes
+  useEffect(() => {
+    if (!paymentModalVisible) {
+      // Reset checkout URL when modal closes
+      setPayOSConfig(prevConfig => ({
+        ...prevConfig,
+        CHECKOUT_URL: null
+      }));
+      
+      // Reset error state
+      setPayosError(null);
+      
+      // Clear container content
+      if (payosContainerRef.current) {
+        payosContainerRef.current.innerHTML = '';
+      }
+    }
+  }, [paymentModalVisible]);
 
   return (
     <div className="cartitems">
@@ -263,7 +336,24 @@ const CartItems = () => {
                 ×
               </button>
             </div>
-            <div id="payos-embedded" className="payos-container"></div>
+            <div id="payos-embedded" className="payos-container" ref={payosContainerRef}>
+              {payosLoading && (
+                <div className="loading">
+                  <p>Creating payment link...</p>
+                </div>
+              )}
+              {payosError && (
+                <div className="error">
+                  <p>{payosError}</p>
+                  <p>Please try again or choose a different payment method.</p>
+                </div>
+              )}
+              {!payosLoading && !payosError && payOSConfig.CHECKOUT_URL && (
+                <div className="checkout-ready">
+                  <p>Payment form is loading...</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

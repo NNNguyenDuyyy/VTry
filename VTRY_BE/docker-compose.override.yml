@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  # Backend API - Development Override
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - NODE_ENV=development
+      - DEBUG=*
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - ./upload:/app/upload
+      - ./logs:/app/logs
+    command: npm run dev
+    ports:
+      - "4000:4000"
+      - "9229:9229"  # Node.js debug port 

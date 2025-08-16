@@ -1,0 +1,28 @@
+node_modules
+npm-debug.log
+.git
+.gitignore
+README.md
+.env
+.env.local
+.env.production
+.env.development
+.nyc_output
+coverage
+.nyc_output
+.coverage
+.coverage/
+*.log
+logs
+*.pid
+*.seed
+*.pid.lock
+.DS_Store
+.vscode
+.idea
+*.swp
+*.swo
+*~
+# Allow upload/images to be included in build
+# upload/images/*
+# !upload/images/.gitkeep
